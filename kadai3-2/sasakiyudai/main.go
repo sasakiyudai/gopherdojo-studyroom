@@ -1,24 +1,24 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"log"
-	"context"
-	"os"
-	"bytes"
-	"errors"
 	"net/url"
-	"runtime"
-	"time"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"time"
 
 	flags "github.com/jessevdk/go-flags"
 
-	"github.com/sasakiyudai/gopherdojo-studyroom/kadai3-2/sasakiyudai/request"
+	"github.com/sasakiyudai/gopherdojo-studyroom/kadai3-2/sasakiyudai/download"
 	"github.com/sasakiyudai/gopherdojo-studyroom/kadai3-2/sasakiyudai/getheader"
 	"github.com/sasakiyudai/gopherdojo-studyroom/kadai3-2/sasakiyudai/listen"
-	"github.com/sasakiyudai/gopherdojo-studyroom/kadai3-2/sasakiyudai/download"
+	"github.com/sasakiyudai/gopherdojo-studyroom/kadai3-2/sasakiyudai/request"
 )
 
 type Options struct {
@@ -113,7 +113,7 @@ func downloadFromUrl(i int, opts Options, urlObj *url.URL) {
 		log.Fatalf("err: &s\n", err)
 	}
 
-	fileSize, err := getheader.Getsize(resp)
+	fileSize, err := getheader.GetSize(resp)
 	if err != nil {
 		log.Fatalf("err: getheader.Getsize: %s\n", err)
 	}
@@ -122,6 +122,7 @@ func downloadFromUrl(i int, opts Options, urlObj *url.URL) {
 	}
 
 	partial := fileSize / opts.Procs
+	partial = partial
 
 	outputPath := opts.Output + filepath.Base(urlObj.String())
 	if isExists(outputPath) {
@@ -140,7 +141,7 @@ func downloadFromUrl(i int, opts Options, urlObj *url.URL) {
 			log.Fatalf("err: %s", err)
 		}
 	}()
-	
+
 	tmpDirName := opts.Output + strconv.Itoa(i)
 	err = os.Mkdir(tmpDirName, 0777)
 	if err != nil {
@@ -176,17 +177,42 @@ func downloadFromUrl(i int, opts Options, urlObj *url.URL) {
 		log.Fatalf("err: getheader.ResHeader: %s\n", err)
 	}
 
-	// err = download.Downloader(urlObj, out, fileSize, partial, opts.Procs, isPara, tmpDirName, ctx)
-	// if err != nil {
-	// 	log.Fatalf("err: %s\n", err)
-	// }
+	err = download.Downloader(urlObj, out, fileSize, partial, opts.Procs, isPara, tmpDirName, ctx)
+	if err != nil {
+		log.Fatalf("err: %s\n", err)
+	}
 
 	fmt.Printf("download complete: %s\n", urlObj.String())
 
-	
+	if isPara {
+		err = MergeFiles(tmpDirName, opts.Procs, fileSize, out)
+		if err != nil {
+			log.Fatalf("err: MergeFiles: %s\n", err)
+		}
+	}
+
+	if err := os.RemoveAll(tmpDirName); err != nil {
+		log.Fatalf("err: RemoveAll: %s\n", err)
+	}
 }
 
 func isExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func MergeFiles(tmpDirName string, procs, fileSize uint, output *os.File) error {
+	for i := uint(0); i < procs; i++ {
+
+		body, err := os.ReadFile(tmpDirName + "/" + strconv.Itoa(int(i)))
+		if err != nil {
+			return err
+		}
+
+		if _, err = fmt.Fprint(output, string(body)); err != nil {
+			return err
+		}
+		fmt.Printf("target file: %s, len=%d written\n", output.Name(), len(string(body)))
+	}
+	return nil
 }

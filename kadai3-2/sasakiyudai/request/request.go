@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func Request(ctx context.Context, method string, urlStr string, setH string, setV stinger) (*http.Response, error) {
+func Request(ctx context.Context, method string, urlStr string, setH string, setV string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, urlStr, nil)
 	if err != nil {
 		return nil, err
